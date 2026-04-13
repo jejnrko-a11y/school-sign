@@ -17,13 +17,14 @@ conn = st.connection("gsheets", type=GSheetsConnection)
 def generate_excel_with_images(df):
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-        # 출력할 컬럼 순서 조정
+        # 출력할 컬럼 순서 고정
         df_display = df[['번호', '성함', '동의여부', '서명']]
         df_display.to_excel(writer, index=False, sheet_name='동의서_결과')
         workbook  = writer.book
         worksheet = writer.sheets['동의서_결과']
 
         format_center = workbook.add_format({'align': 'center', 'valign': 'vcenter', 'border': 1})
+        worksheet.set_column('A:A', 8)  # 번호
         worksheet.set_column('B:B', 12) # 성함
         worksheet.set_column('C:C', 12) # 동의여부
         worksheet.set_column('D:D', 25) # 서명
@@ -32,16 +33,19 @@ def generate_excel_with_images(df):
             row_num = idx + 1
             worksheet.set_row(row_num, 60)
             
-            sig_data = str(row['서명'])
+            # 서명 데이터 추출 및 정제
+            sig_data = str(row.get('서명', ''))
             if sig_data.startswith("'"): sig_data = sig_data[1:]
             
-            if sig_data and sig_data != "":
+            # 실제 서명 데이터(Base64)가 있을 때만 이미지 삽입
+            if len(sig_data) > 100: 
                 try:
                     img_data = base64.b64decode(sig_data)
                     img_io = io.BytesIO(img_data)
                     # 서명 이미지를 D열(index 3)에 삽입
-                    worksheet.insert_image(row_num, 3, 'signature.png', 
+                    worksheet.insert_image(row_num, 3, f'sig_{idx}.png', 
                                          {'image_data': img_io, 'x_scale': 0.5, 'y_scale': 0.5, 'x_offset': 5, 'y_offset': 5})
+                    # 텍스트 데이터는 가리고 셀 테두리만 유지
                     worksheet.write(row_num, 3, "", format_center) 
                 except: pass
     return output.getvalue()
@@ -51,22 +55,34 @@ st.title("2026 경기기공 재구조화 동의서")
 
 menu_tab1, menu_tab2 = st.tabs(["✍️ 동의서 서명", "📊 관리자 메뉴"])
 
+# --- [공통] 데이터 로드 및 자동 컬럼 생성 ---
+try:
+    df_all = conn.read(worksheet="동의서양식", ttl=0)
+    
+    # 필수 컬럼(동의여부, 서명)이 시트에 없으면 에러 방지를 위해 자동 생성
+    for col in ['번호', '성함', '동의여부', '서명']:
+        if col not in df_all.columns:
+            df_all[col] = ""
+            
+    df_all = df_all.fillna("")
+    
+    # 미완료자 추출 로직 보완 (공백 문자열 포함 체크)
+    unsigned_df = df_all[df_all['서명'].apply(lambda x: str(x).strip() == "")]
+    unsigned_list = unsigned_df['성함'].tolist()
+    
+    total_count = len(df_all)
+    signed_count = total_count - len(unsigned_df)
+    
+except Exception as e:
+    st.error(f"⚠️ 데이터를 불러올 수 없습니다: {e}")
+    st.info("💡 팁: 구글 시트의 첫 행에 '번호'와 '성함' 제목이 있는지 확인해주세요.")
+    st.stop()
+
 # --- 탭 1: 서명하기 ---
 with menu_tab1:
     with st.container(border=True):
         st.subheader("📢 재구조화 사업 안내")
         st.info("본 사업에 대한 안내를 충분히 숙지하셨습니까? 성함을 선택하신 후 본인의 의사를 표시하고 서명해 주시기 바랍니다.")
-
-    try:
-        df_all = conn.read(worksheet="동의서양식", ttl=0).fillna("")
-        unsigned_df = df_all[df_all['서명'] == ""]
-        unsigned_list = unsigned_df['성함'].tolist()
-        
-        total_count = len(df_all)
-        signed_count = total_count - len(unsigned_df)
-    except:
-        st.error("시트를 불러올 수 없습니다. '동의서양식' 탭의 컬럼(번호, 성함, 동의여부, 서명)을 확인해 주세요.")
-        st.stop()
 
     st.progress(signed_count / total_count if total_count > 0 else 0)
     st.caption(f"참여 현황: {signed_count}명 완료 / 총 {total_count}명")
@@ -77,7 +93,6 @@ with menu_tab1:
         selected_name = st.selectbox(f"성함을 선택하세요 (미완료 {len(unsigned_list)}명)", ["선택하세요"] + unsigned_list)
 
         if selected_name != "선택하세요":
-            # [추가] 동의/미동의 선택
             st.markdown("---")
             st.markdown(f"### 📍 {selected_name} 선생님의 의견 선택")
             agree_status = st.radio("본 사업 추진에 동의하십니까?", ["동의", "미동의"], index=0, horizontal=True)
@@ -93,9 +108,10 @@ with menu_tab1:
             )
 
             if st.button("최종 제출하기", use_container_width=True):
+                # 캔버스에 그림 데이터가 있는지 확인
                 if canvas_result.image_data is not None:
                     with st.spinner("제출 중..."):
-                        # 서명 이미지 처리
+                        # 서명 이미지 처리 (배경 흰색)
                         rgba_img = Image.fromarray(canvas_result.image_data.astype('uint8'), 'RGBA')
                         white_bg = Image.new("RGB", rgba_img.size, (255, 255, 255))
                         white_bg.paste(rgba_img, mask=rgba_img.split()[3])
@@ -106,7 +122,7 @@ with menu_tab1:
                         img.save(buf, format="PNG")
                         sig_b64 = base64.b64encode(buf.getvalue()).decode()
 
-                        # 데이터 업데이트 (동의여부 포함)
+                        # 데이터 업데이트
                         row_idx = df_all.index[df_all['성함'] == selected_name].tolist()[0]
                         df_all.at[row_idx, '동의여부'] = agree_status
                         df_all.at[row_idx, '서명'] = f"'{sig_b64}"
@@ -135,7 +151,7 @@ with menu_tab2:
     else:
         st.info("✅ 관리자 권한 접속 중")
         
-        # [추가] 찬반 통계 보기
+        # 찬반 통계 보기
         agree_counts = df_all['동의여부'].value_counts()
         c1, c2, c3 = st.columns(3)
         c1.metric("전체 참여", f"{signed_count}명")
@@ -158,7 +174,7 @@ with menu_tab2:
         st.divider()
         st.write("### 📋 세부 현황")
         view_df = df_all[['번호', '성함', '동의여부']].copy()
-        view_df['상태'] = df_all['서명'].apply(lambda x: "✅ 완료" if x else "⏳ 미완료")
+        view_df['상태'] = df_all['서명'].apply(lambda x: "✅ 완료" if str(x).strip() != "" else "⏳ 미완료")
         st.dataframe(view_df, hide_index=True, use_container_width=True)
 
         if st.button("🔐 관리자 모드 종료"):
