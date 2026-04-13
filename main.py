@@ -127,7 +127,7 @@ with menu_tab2:
     if not st.session_state.admin_authenticated:
         pw = st.text_input("관리자 비밀번호", type="password")
         if st.button("관리자 모드 활성화", use_container_width=True):
-            if pw == st.secrets.get("auth", {}).get("admin_password", "1234"):
+            if pw == st.secrets.get("auth", {}).get("admin_password", "0815"):
                 st.session_state.admin_authenticated = True
                 st.rerun()
             else:
