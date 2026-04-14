@@ -46,7 +46,19 @@ def generate_excel_with_images(df):
     return output.getvalue()
 
 # --- 화면 구성 ---
-st.title("2026 경기기공 재구조화 동의서")
+st.title("2026년 직업계고 재구조화 추진을 위한 교직원 동의서")
+
+# 사업 설명 내용 추가
+with st.expander("📝 재구조화 사업 안내 자세히 보기", expanded=True):
+    st.markdown("""
+    경기기계공업고등학교는 4차 산업혁명에 따른 일자리의 변화에 따르는 현장적합성 제고를 위한 중등직업교육 체질 개선 및 미래 산업을 연계한 직업계고 재구조화를 통해, 학생들이 창의적으로 문제를 해결할 수 있는 역량을 기르고 공공의 가치를 실현하는 민주시민으로 성장하는 데 교육의 중점을 두고 재구조화사업을 추진하고 있습니다.
+
+    변화하는 시대적 요구에 부응하고 산업 현장이 요구하는 지식, 기술, 소양을 갖춘 인재를 양성하기 위하여 아래와 같이 하이텍융합기계과, 스마트설비과를 재구조화하고 교육 과정을 개편하고자 합니다.
+
+    * **하이텍융합기계과** → *(피지컬AI, 로봇기구개발 도입)*
+    * **스마트설비과** → *(AI설비보전과 에너지지능형관리 도입)*
+    """)
+
 menu_tab1, menu_tab2 = st.tabs(["✍️ 동의서 서명", "📊 관리자 메뉴"])
 
 # --- 데이터 로드 (캐시 사용) ---
@@ -68,6 +80,9 @@ with menu_tab1:
         if selected_name != "선택하세요":
             st.markdown("---")
             agree_status = st.radio("본 사업 추진에 동의하십니까?", ["동의", "미동의"], horizontal=True)
+            
+            # 정자 서명 안내 문구 추가
+            st.warning("📌 서명란에 **이름을 정자(또박또박)**로 써주시기 바랍니다.")
             canvas_result = st_canvas(fill_color="rgba(255, 255, 255, 0)", stroke_width=4, stroke_color="#000000", background_color="#FFFFFF", height=180, width=320, drawing_mode="freedraw", key="sig_pad")
 
             if st.button("최종 제출하기", use_container_width=True):
