@@ -82,7 +82,7 @@ with menu_tab1:
             agree_status = st.radio("본 사업 추진에 동의하십니까?", ["동의", "미동의"], horizontal=True)
             
             # 정자 서명 안내 문구 추가
-            st.warning("📌 서명란에 **이름을 정자(또박또박)**로 써주시기 바랍니다.")
+            st.warning("📌 서명란에 이름을 정자로 써주시기 바랍니다.")
             canvas_result = st_canvas(fill_color="rgba(255, 255, 255, 0)", stroke_width=4, stroke_color="#000000", background_color="#FFFFFF", height=180, width=320, drawing_mode="freedraw", key="sig_pad")
 
             if st.button("최종 제출하기", use_container_width=True):
